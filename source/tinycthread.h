@@ -89,8 +89,7 @@ struct _tthread_timespec {
 #define timespec _tthread_timespec
 #endif
 
-int _tthread_timespec_get(struct timespec *ts, int base);
-#define timespec_get _tthread_timespec_get
+int timespec_get(struct timespec *ts, int base);
 #endif
 
 /** TinyCThread version (major number). */

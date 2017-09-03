@@ -946,7 +946,7 @@ int tss_set(tss_t opaque_key, void *val)
 }
 
 #if defined(_TTHREAD_EMULATE_TIMESPEC_GET_)
-int _tthread_timespec_get(struct timespec *ts, int base)
+int timespec_get(struct timespec *ts, int base)
 {
 #if defined(_TTHREAD_WIN32_)
   struct _timeb tb;
