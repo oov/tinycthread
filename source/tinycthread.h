@@ -142,7 +142,7 @@ int timespec_get(struct timespec *ts, int base);
 
 /* Opaque mutex */
 typedef struct {
-	long long _opaque_data[8];
+	long _opaque_data[8];
 } mtx_t;
 
 /** Create a mutex object.
@@ -202,7 +202,7 @@ int mtx_unlock(mtx_t *mtx);
 
 /* Opaque condition variable */
 typedef struct {
-	long long _opaque_data[8];
+	long _opaque_data[8];
 } cnd_t;
 
 /** Create a condition variable object.
@@ -265,7 +265,7 @@ int cnd_timedwait(cnd_t *cond, mtx_t *mtx, const struct timespec *ts);
 
 /* Thread */
 typedef struct {
-	long long _opaque_data[2];
+	long _opaque_data[2];
 } thrd_t;
 
 /** Thread start function.
@@ -345,7 +345,7 @@ int thrd_sleep(const struct timespec *duration, struct timespec *remaining);
 void thrd_yield(void);
 
 /* Thread local storage */
-typedef long long tss_t;
+typedef long tss_t;
 
 /** Destructor function for a thread-specific storage.
 * @param val The value of the destructed thread-specific storage.
