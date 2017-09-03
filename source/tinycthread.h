@@ -62,41 +62,9 @@ extern "C" {
   #define _TTHREAD_PLATFORM_DEFINED_
 #endif
 
-/* Activate some POSIX functionality (e.g. clock_gettime and recursive mutexes) */
-#if defined(_TTHREAD_POSIX_)
-  #undef _FEATURES_H
-  #if !defined(_GNU_SOURCE)
-    #define _GNU_SOURCE
-  #endif
-  #if !defined(_POSIX_C_SOURCE) || ((_POSIX_C_SOURCE - 0) < 199309L)
-    #undef _POSIX_C_SOURCE
-    #define _POSIX_C_SOURCE 199309L
-  #endif
-  #if !defined(_XOPEN_SOURCE) || ((_XOPEN_SOURCE - 0) < 500)
-    #undef _XOPEN_SOURCE
-    #define _XOPEN_SOURCE 500
-  #endif
-  #define _XPG6
-#endif
-
 /* Generic includes */
 #include <stddef.h>
 #include <time.h>
-
-/* Platform specific includes */
-#if defined(_TTHREAD_POSIX_)
-  #include <pthread.h>
-#elif defined(_TTHREAD_WIN32_)
-  #ifndef WIN32_LEAN_AND_MEAN
-    #define WIN32_LEAN_AND_MEAN
-    #define __UNDEF_LEAN_AND_MEAN
-  #endif
-  #include <windows.h>
-  #ifdef __UNDEF_LEAN_AND_MEAN
-    #undef WIN32_LEAN_AND_MEAN
-    #undef __UNDEF_LEAN_AND_MEAN
-  #endif
-#endif
 
 /* Compiler-specific information */
 #if defined(__STDC_VERSION__) && __STDC_VERSION__ >= 201112L
@@ -161,13 +129,6 @@ int _tthread_timespec_get(struct timespec *ts, int base);
  #define _Thread_local __thread
 #endif
 
-/* Macros */
-#if defined(_TTHREAD_WIN32_)
-#define TSS_DTOR_ITERATIONS (4)
-#else
-#define TSS_DTOR_ITERATIONS PTHREAD_DESTRUCTOR_ITERATIONS
-#endif
-
 /* Function return values */
 #define thrd_error    0 /**< The requested operation failed */
 #define thrd_success  1 /**< The requested operation succeeded */
@@ -180,20 +141,10 @@ int _tthread_timespec_get(struct timespec *ts, int base);
 #define mtx_timed     1
 #define mtx_recursive 2
 
-/* Mutex */
-#if defined(_TTHREAD_WIN32_)
+/* Opaque mutex */
 typedef struct {
-  union {
-    CRITICAL_SECTION cs;      /* Critical section handle (used for non-timed mutexes) */
-    HANDLE mut;               /* Mutex handle (used for timed mutex) */
-  } mHandle;                  /* Mutex handle */
-  int mAlreadyLocked;         /* TRUE if the mutex is already locked */
-  int mRecursive;             /* TRUE if the mutex is recursive */
-  int mTimed;                 /* TRUE if the mutex is timed */
+	long long _opaque_data[8];
 } mtx_t;
-#else
-typedef pthread_mutex_t mtx_t;
-#endif
 
 /** Create a mutex object.
 * @param mtx A mutex object.
@@ -250,16 +201,10 @@ int mtx_trylock(mtx_t *mtx);
 */
 int mtx_unlock(mtx_t *mtx);
 
-/* Condition variable */
-#if defined(_TTHREAD_WIN32_)
+/* Opaque condition variable */
 typedef struct {
-  HANDLE mEvents[2];                  /* Signal and broadcast event HANDLEs. */
-  unsigned int mWaitersCount;         /* Count of the number of waiters. */
-  CRITICAL_SECTION mWaitersCountLock; /* Serialize access to mWaitersCount. */
+	long long _opaque_data[8];
 } cnd_t;
-#else
-typedef pthread_cond_t cnd_t;
-#endif
 
 /** Create a condition variable object.
 * @param cond A condition variable object.
@@ -320,11 +265,9 @@ int cnd_wait(cnd_t *cond, mtx_t *mtx);
 int cnd_timedwait(cnd_t *cond, mtx_t *mtx, const struct timespec *ts);
 
 /* Thread */
-#if defined(_TTHREAD_WIN32_)
-typedef HANDLE thrd_t;
-#else
-typedef pthread_t thrd_t;
-#endif
+typedef struct {
+	long long _opaque_data[2];
+} thrd_t;
 
 /** Thread start function.
 * Any thread that is started with the @ref thrd_create() function must be
@@ -403,11 +346,7 @@ int thrd_sleep(const struct timespec *duration, struct timespec *remaining);
 void thrd_yield(void);
 
 /* Thread local storage */
-#if defined(_TTHREAD_WIN32_)
-typedef DWORD tss_t;
-#else
-typedef pthread_key_t tss_t;
-#endif
+typedef long long tss_t;
 
 /** Destructor function for a thread-specific storage.
 * @param val The value of the destructed thread-specific storage.
@@ -451,27 +390,19 @@ void *tss_get(tss_t key);
 */
 int tss_set(tss_t key, void *val);
 
-#if defined(_TTHREAD_WIN32_)
-  typedef struct {
-    LONG volatile status;
-    CRITICAL_SECTION lock;
-  } once_flag;
-  #define ONCE_FLAG_INIT {0,}
-#else
-  #define once_flag pthread_once_t
-  #define ONCE_FLAG_INIT PTHREAD_ONCE_INIT
-#endif
+typedef struct {
+  mtx_t _lock;
+  volatile int _status;
+} once_flag;
+
+#define ONCE_FLAG_INIT {0,}
 
 /** Invoke a callback exactly once
  * @param flag Flag used to ensure the callback is invoked exactly
  *        once.
  * @param func Callback to invoke.
  */
-#if defined(_TTHREAD_WIN32_)
-  void call_once(once_flag *flag, void (*func)(void));
-#else
-  #define call_once(flag,func) pthread_once(flag,func)
-#endif
+void call_once(once_flag *flag, void (*func)(void));
 
 #ifdef __cplusplus
 }
