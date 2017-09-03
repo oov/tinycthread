@@ -29,11 +29,14 @@ WINDOWS=1
 endif
 
 # Compiler settings
-CC = gcc
 ifeq ($(findstring gcc, $(CC)), gcc)
 CFLAGS = -W -std=c89 -pedantic -O3 -c -I../source
 else
+ifeq ($(findstring clang, $(CC)), clang)
+CFLAGS = -W -Wno-missing-field-initializers -O3 -c -I../source
+else
 CFLAGS = -W -O3 -c -I../source
+endif
 endif
 LFLAGS =
 LIBS =
@@ -49,7 +52,7 @@ endif
 
 # MinGW32 GCC 4.5 link problem fix
 ifdef WINDOWS
-ifeq ($(findstring 4.5.,$(shell g++ -dumpversion)), 4.5.)
+ifeq ($(findstring 4.5.,$(shell gcc -dumpversion)), 4.5.)
 LFLAGS += -static-libgcc
 endif
 endif
@@ -90,9 +93,6 @@ test$(EXE): $(TEST_OBJS) $(TINYCTHREAD_OBJS)
 
 hello$(EXE): $(HELLO_OBJS) $(TINYCTHREAD_OBJS)
 	$(CC) $(LFLAGS) -o $@ $(HELLO_OBJS) $(TINYCTHREAD_OBJS) $(LIBS)
-
-%.o: %.cpp
-	$(CC) $(CFLAGS) $<
 
 %.o: ../source/%.c
 	$(CC) $(CFLAGS) $<
