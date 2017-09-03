@@ -334,6 +334,7 @@ static void test_mutex_timed(void)
 
 static int test_thrd_exit_func(void* arg)
 {
+  (void) arg;
   test_sleep();
   thrd_exit(2);
   return 1;
