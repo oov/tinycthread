@@ -80,6 +80,7 @@ extern "C" {
 #endif
 
 /* Generic includes */
+#include <stddef.h>
 #include <time.h>
 
 /* Platform specific includes */

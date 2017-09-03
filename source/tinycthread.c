@@ -23,6 +23,7 @@ freely, subject to the following restrictions:
 */
 
 #include "tinycthread.h"
+#include <stdbool.h>
 #include <stdlib.h>
 
 /* Platform specific includes */
@@ -37,17 +38,6 @@ freely, subject to the following restrictions:
   #include <sys/timeb.h>
 #endif
 
-/* Standard, good-to-have defines */
-#ifndef NULL
-  #define NULL (void*)0
-#endif
-#ifndef TRUE
-  #define TRUE 1
-#endif
-#ifndef FALSE
-  #define FALSE 0
-#endif
-
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -56,7 +46,7 @@ extern "C" {
 int mtx_init(mtx_t *mtx, int type)
 {
 #if defined(_TTHREAD_WIN32_)
-  mtx->mAlreadyLocked = FALSE;
+  mtx->mAlreadyLocked = false;
   mtx->mRecursive = type & mtx_recursive;
   mtx->mTimed = type & mtx_timed;
   if (!mtx->mTimed)
@@ -65,7 +55,7 @@ int mtx_init(mtx_t *mtx, int type)
   }
   else
   {
-    mtx->mHandle.mut = CreateMutex(NULL, FALSE, NULL);
+    mtx->mHandle.mut = CreateMutex(NULL, false, NULL);
     if (mtx->mHandle.mut == NULL)
     {
       return thrd_error;
@@ -124,7 +114,7 @@ int mtx_lock(mtx_t *mtx)
   if (!mtx->mRecursive)
   {
     while(mtx->mAlreadyLocked) Sleep(1); /* Simulate deadlock... */
-    mtx->mAlreadyLocked = TRUE;
+    mtx->mAlreadyLocked = true;
   }
   return thrd_success;
 #else
@@ -172,7 +162,7 @@ int mtx_timedlock(mtx_t *mtx, const struct timespec *ts)
   if (!mtx->mRecursive)
   {
     while(mtx->mAlreadyLocked) Sleep(1); /* Simulate deadlock... */
-    mtx->mAlreadyLocked = TRUE;
+    mtx->mAlreadyLocked = true;
   }
 
   return thrd_success;
@@ -250,7 +240,7 @@ int mtx_trylock(mtx_t *mtx)
     }
     else
     {
-      mtx->mAlreadyLocked = TRUE;
+      mtx->mAlreadyLocked = true;
     }
   }
   return ret;
@@ -262,7 +252,7 @@ int mtx_trylock(mtx_t *mtx)
 int mtx_unlock(mtx_t *mtx)
 {
 #if defined(_TTHREAD_WIN32_)
-  mtx->mAlreadyLocked = FALSE;
+  mtx->mAlreadyLocked = false;
   if (!mtx->mTimed)
   {
     LeaveCriticalSection(&(mtx->mHandle.cs));
@@ -294,13 +284,13 @@ int cnd_init(cnd_t *cond)
   InitializeCriticalSection(&cond->mWaitersCountLock);
 
   /* Init events */
-  cond->mEvents[_CONDITION_EVENT_ONE] = CreateEvent(NULL, FALSE, FALSE, NULL);
+  cond->mEvents[_CONDITION_EVENT_ONE] = CreateEvent(NULL, false, false, NULL);
   if (cond->mEvents[_CONDITION_EVENT_ONE] == NULL)
   {
     cond->mEvents[_CONDITION_EVENT_ALL] = NULL;
     return thrd_error;
   }
-  cond->mEvents[_CONDITION_EVENT_ALL] = CreateEvent(NULL, TRUE, FALSE, NULL);
+  cond->mEvents[_CONDITION_EVENT_ALL] = CreateEvent(NULL, true, false, NULL);
   if (cond->mEvents[_CONDITION_EVENT_ALL] == NULL)
   {
     CloseHandle(cond->mEvents[_CONDITION_EVENT_ONE]);
@@ -398,7 +388,7 @@ static int _cnd_timedwait_win32(cnd_t *cond, mtx_t *mtx, DWORD timeout)
 
   /* Wait for either event to become signaled due to cnd_signal() or
      cnd_broadcast() being called */
-  result = WaitForMultipleObjects(2, cond->mEvents, FALSE, timeout);
+  result = WaitForMultipleObjects(2, cond->mEvents, false, timeout);
   if (result == WAIT_TIMEOUT)
   {
     /* The mutex is locked again before the function returns, even if an error occurred */
@@ -717,7 +707,7 @@ int thrd_sleep(const struct timespec *duration, struct timespec *remaining)
   t = SleepEx((DWORD)(duration->tv_sec * 1000 +
               duration->tv_nsec / 1000000 +
               (((duration->tv_nsec % 1000000) == 0) ? 0 : 1)),
-              TRUE);
+              true);
 
   if (t == 0) {
     return 0;
