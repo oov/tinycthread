@@ -260,7 +260,7 @@ int cnd_wait(cnd_t *cond, mtx_t *mtx);
 * becomes unblocked it locks the mutex before it returns.
 * @param cond A condition variable object.
 * @param mtx A mutex object.
-* @param xt A point in time at which the request will time out (absolute time).
+* @param ts A point in time at which the request will time out (absolute time).
 * @return @ref thrd_success upon success, or @ref thrd_timeout if the time
 * specified in the call was reached without acquiring the requested resource, or
 * @ref thrd_error if the request could not be honored.
