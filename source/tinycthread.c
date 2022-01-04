@@ -84,9 +84,9 @@ typedef struct {
     CRITICAL_SECTION cs;      /* Critical section handle (used for non-timed mutexes) */
     HANDLE mut;               /* Mutex handle (used for timed mutex) */
   } mHandle;                  /* Mutex handle */
-  int mAlreadyLocked;         /* true if the mutex is already locked */
-  int mRecursive;             /* true if the mutex is recursive */
-  int mTimed;                 /* true if the mutex is timed */
+  bool mAlreadyLocked;         /* true if the mutex is already locked */
+  bool mRecursive;             /* true if the mutex is recursive */
+  bool mTimed;                 /* true if the mutex is timed */
 } system_mtx_t;
 
 typedef struct {
@@ -450,8 +450,9 @@ int cnd_broadcast(cnd_t *opaque_cond)
 }
 
 #if defined(_TTHREAD_WIN32_)
-static int _cnd_timedwait_win32(cnd_t *system_cnd_t, system_mtx_t *mtx, DWORD timeout)
+static int _cnd_timedwait_win32(cnd_t *opaque_cond, mtx_t *mtx, DWORD timeout)
 {
+  system_cnd_t *cond = (system_cnd_t*)opaque_cond;
   DWORD result;
   int lastWaiter;
 
@@ -507,19 +508,17 @@ static int _cnd_timedwait_win32(cnd_t *system_cnd_t, system_mtx_t *mtx, DWORD ti
 
 int cnd_wait(cnd_t *opaque_cond, mtx_t *opaque_mtx)
 {
+#if defined(_TTHREAD_WIN32_)
+  return _cnd_timedwait_win32(opaque_cond, opaque_mtx, INFINITE);
+#else
   system_mtx_t *mtx = (system_mtx_t*)opaque_mtx;
   system_cnd_t *cond = (system_cnd_t*)opaque_cond;
-#if defined(_TTHREAD_WIN32_)
-  return _cnd_timedwait_win32(cond, mtx, INFINITE);
-#else
   return pthread_cond_wait(cond, mtx) == 0 ? thrd_success : thrd_error;
 #endif
 }
 
 int cnd_timedwait(cnd_t *opaque_cond, mtx_t *opaque_mtx, const struct timespec *ts)
 {
-  system_mtx_t *mtx = (system_mtx_t*)opaque_mtx;
-  system_cnd_t *cond = (system_cnd_t*)opaque_cond;
 #if defined(_TTHREAD_WIN32_)
   struct timespec now;
   if (timespec_get(&now, TIME_UTC) == TIME_UTC)
@@ -528,11 +527,13 @@ int cnd_timedwait(cnd_t *opaque_cond, mtx_t *opaque_mtx, const struct timespec *
     unsigned long long tsInMilliseconds  = ts->tv_sec * 1000 + ts->tv_nsec / 1000000;
     DWORD delta = (tsInMilliseconds > nowInMilliseconds) ?
       (DWORD)(tsInMilliseconds - nowInMilliseconds) : 0;
-    return _cnd_timedwait_win32(cond, mtx, delta);
+    return _cnd_timedwait_win32(opaque_cond, opaque_mtx, delta);
   }
   else
     return thrd_error;
 #else
+  system_mtx_t *mtx = (system_mtx_t*)opaque_mtx;
+  system_cnd_t *cond = (system_cnd_t*)opaque_cond;
   int ret;
   ret = pthread_cond_timedwait(cond, mtx, ts);
   if (ret == ETIMEDOUT)

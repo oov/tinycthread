@@ -202,7 +202,11 @@ int mtx_unlock(mtx_t *mtx);
 
 /* Opaque condition variable */
 typedef struct {
+#if defined(_TTHREAD_WIN32_)
+	long _opaque_data[9];
+#else
 	long _opaque_data[8];
+#endif
 } cnd_t;
 
 /** Create a condition variable object.
