@@ -348,6 +348,8 @@ int thrd_sleep(const struct timespec *duration, struct timespec *remaining);
 */
 void thrd_yield(void);
 
+#if !defined(DISABLE_TLS)
+
 /* Thread local storage */
 typedef long tss_t;
 
@@ -392,6 +394,8 @@ void *tss_get(tss_t key);
 * not be honored.
 */
 int tss_set(tss_t key, void *val);
+
+#endif // !defined(DISABLE_TLS)
 
 typedef struct {
   mtx_t _lock;

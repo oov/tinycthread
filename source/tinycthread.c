@@ -544,6 +544,8 @@ int cnd_timedwait(cnd_t *opaque_cond, mtx_t *opaque_mtx, const struct timespec *
 #endif
 }
 
+#if !defined(DISABLE_TLS)
+
 #if defined(_TTHREAD_WIN32_)
 struct TinyCThreadTSSData {
   void* value;
@@ -621,6 +623,8 @@ static void NTAPI _tinycthread_tss_callback(PVOID h, DWORD dwReason, PVOID pv)
 
 #endif /* defined(_TTHREAD_WIN32_) */
 
+#endif // !defined(DISABLE_TLS)
+
 /** Information to pass to the new thread (what to run). */
 typedef struct {
   thrd_start_t mFunction; /**< Pointer to the function to be executed. */
@@ -650,11 +654,12 @@ static void * _thrd_wrapper_function(void * aArg)
   res = fun(arg);
 
 #if defined(_TTHREAD_WIN32_)
+#if !defined(DISABLE_TLS)
   if (_tinycthread_tss_head != NULL)
   {
     _tinycthread_tss_cleanup();
   }
-
+#endif
   return (DWORD)res;
 #else
   return (void*)(intptr_t)res;
@@ -730,11 +735,12 @@ int thrd_equal(thrd_t opaque_thr0, thrd_t opaque_thr1)
 void thrd_exit(int res)
 {
 #if defined(_TTHREAD_WIN32_)
+#if !defined(DISABLE_TLS)
   if (_tinycthread_tss_head != NULL)
   {
     _tinycthread_tss_cleanup();
   }
-
+#endif
   ExitThread((DWORD)res);
 #else
   pthread_exit((void*)(intptr_t)res);
@@ -826,6 +832,8 @@ void thrd_yield(void)
   sched_yield();
 #endif
 }
+
+#if !defined(DISABLE_TLS)
 
 int tss_create(tss_t *opaque_key, tss_dtor_t dtor)
 {
@@ -945,6 +953,8 @@ int tss_set(tss_t opaque_key, void *val)
 #endif
   return thrd_success;
 }
+
+#endif // !defined(DISABLE_TLS)
 
 #if defined(_TTHREAD_EMULATE_TIMESPEC_GET_)
 int timespec_get(struct timespec *ts, int base)
