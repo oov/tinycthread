@@ -142,7 +142,7 @@ int timespec_get(struct timespec *ts, int base);
 
 /* Opaque mutex */
 typedef struct {
-	long _opaque_data[8];
+	size_t _opaque_data[8];
 } mtx_t;
 
 /** Create a mutex object.
@@ -203,9 +203,9 @@ int mtx_unlock(mtx_t *mtx);
 /* Opaque condition variable */
 typedef struct {
 #if defined(_TTHREAD_WIN32_)
-	long _opaque_data[9];
+	size_t _opaque_data[9];
 #else
-	long _opaque_data[8];
+	size_t _opaque_data[8];
 #endif
 } cnd_t;
 
@@ -269,7 +269,11 @@ int cnd_timedwait(cnd_t *cond, mtx_t *mtx, const struct timespec *ts);
 
 /* Thread */
 typedef struct {
-	long _opaque_data[2];
+#if defined(_TTHREAD_WIN32_)
+	size_t _opaque_data[1];
+#else
+	size_t _opaque_data[2];
+#endif
 } thrd_t;
 
 /** Thread start function.

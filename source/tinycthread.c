@@ -214,7 +214,7 @@ int mtx_timedlock(mtx_t *opaque_mtx, const struct timespec *ts)
   else
   {
     timeoutMs  = (DWORD)(ts->tv_sec  - current_ts.tv_sec)  * 1000;
-    timeoutMs += (ts->tv_nsec - current_ts.tv_nsec) / 1000000;
+    timeoutMs += (DWORD)((ts->tv_nsec - current_ts.tv_nsec) / 1000000);
     timeoutMs += 1;
   }
 
@@ -523,8 +523,8 @@ int cnd_timedwait(cnd_t *opaque_cond, mtx_t *opaque_mtx, const struct timespec *
   struct timespec now;
   if (timespec_get(&now, TIME_UTC) == TIME_UTC)
   {
-    unsigned long long nowInMilliseconds = now.tv_sec * 1000 + now.tv_nsec / 1000000;
-    unsigned long long tsInMilliseconds  = ts->tv_sec * 1000 + ts->tv_nsec / 1000000;
+    DWORD nowInMilliseconds = (DWORD)(now.tv_sec * 1000 + now.tv_nsec / 1000000);
+    DWORD tsInMilliseconds  = (DWORD)(ts->tv_sec * 1000 + ts->tv_nsec / 1000000);
     DWORD delta = (tsInMilliseconds > nowInMilliseconds) ?
       (DWORD)(tsInMilliseconds - nowInMilliseconds) : 0;
     return _cnd_timedwait_win32(opaque_cond, opaque_mtx, delta);
