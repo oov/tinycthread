@@ -61,21 +61,6 @@ freely, subject to the following restrictions:
 extern "C" {
 #endif
 
-/* Compiler-specific cmpxchg builtin */
-#ifdef __GNUC__
-static int cmpxchg(volatile int *address, int old_val, int new_val)
-{
-  return __sync_val_compare_and_swap(address, old_val, new_val);
-}
-#elif defined(MSVC)
-static int cmpxchg(volatile int *address, int old_val, int new_val)
-{
-  return InterlockedCompareExchange(address, new_val, old_val);
-}
-#else
-#error
-#endif
-
 /* Platform spacific underlying types, values */
 #if defined(_TTHREAD_WIN32_)
 
@@ -987,6 +972,21 @@ int timespec_get(struct timespec *ts, int base)
 #endif /* _TTHREAD_EMULATE_TIMESPEC_GET_ */
 
 #if !defined(DISABLE_CALL_ONCE)
+
+/* Compiler-specific cmpxchg builtin */
+#ifdef __GNUC__
+static int cmpxchg(volatile int *address, int old_val, int new_val)
+{
+  return __sync_val_compare_and_swap(address, old_val, new_val);
+}
+#elif defined(MSVC)
+static int cmpxchg(volatile int *address, int old_val, int new_val)
+{
+  return InterlockedCompareExchange(address, new_val, old_val);
+}
+#else
+#error
+#endif
 
 void call_once(once_flag *flag, void (*func)(void))
 {
