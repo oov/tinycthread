@@ -986,6 +986,8 @@ int timespec_get(struct timespec *ts, int base)
 }
 #endif /* _TTHREAD_EMULATE_TIMESPEC_GET_ */
 
+#if !defined(DISABLE_CALL_ONCE)
+
 void call_once(once_flag *flag, void (*func)(void))
 {
   /* The idea here is that we use a spin lock (via the cmpxchg
@@ -1016,6 +1018,8 @@ void call_once(once_flag *flag, void (*func)(void))
     }
   }
 }
+
+#endif // !defined(DISABLE_CALL_ONCE)
 
 #ifdef __cplusplus
 }

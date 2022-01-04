@@ -401,6 +401,8 @@ int tss_set(tss_t key, void *val);
 
 #endif // !defined(DISABLE_TLS)
 
+#if !defined(DISABLE_CALL_ONCE)
+
 typedef struct {
   mtx_t _lock;
   volatile int _status;
@@ -414,6 +416,8 @@ typedef struct {
  * @param func Callback to invoke.
  */
 void call_once(once_flag *flag, void (*func)(void));
+
+#endif // !defined(DISABLE_CALL_ONCE)
 
 #ifdef __cplusplus
 }
