@@ -98,6 +98,7 @@ typedef pthread_key_t system_tss_t;
 
 int mtx_init(mtx_t *opaque_mtx, int type)
 {
+  _Static_assert(sizeof(mtx_t) >= sizeof(system_mtx_t), "sizeof(mtx_t) must be greater than or equal to sizeof(system_mtx_t).");
   system_mtx_t *mtx = (system_mtx_t*)opaque_mtx;
 #if defined(_TTHREAD_WIN32_)
   mtx->mAlreadyLocked = false;
@@ -336,6 +337,7 @@ int mtx_unlock(mtx_t *opaque_mtx)
 
 int cnd_init(cnd_t *opaque_cond)
 {
+  _Static_assert(sizeof(cnd_t) >= sizeof(system_cnd_t), "sizeof(cnd_t) must be greater than or equal to sizeof(system_cnd_t).");
   system_cnd_t *cond = (system_cnd_t*)opaque_cond;
 #if defined(_TTHREAD_WIN32_)
   cond->mWaitersCount = 0;
@@ -653,6 +655,7 @@ static void * _thrd_wrapper_function(void * aArg)
 
 int thrd_create(thrd_t *opaque_thr, thrd_start_t func, void *arg)
 {
+  _Static_assert(sizeof(thrd_t) >= sizeof(system_thrd_t), "sizeof(thrd_t) must be greater than or equal to sizeof(system_thrd_t).");
   system_thrd_t *thr = (system_thrd_t*)opaque_thr;
   /* Fill out the thread startup information (passed to the thread wrapper,
      which will eventually free it) */
@@ -822,6 +825,7 @@ void thrd_yield(void)
 
 int tss_create(tss_t *opaque_key, tss_dtor_t dtor)
 {
+  _Static_assert(sizeof(tss_t) >= sizeof(system_tss_t), "sizeof(tss_t) must be greater than or equal to sizeof(system_tss_t).");
   system_tss_t *key = (system_tss_t*)opaque_key;
 #if defined(_TTHREAD_WIN32_)
   *key = TlsAlloc();
