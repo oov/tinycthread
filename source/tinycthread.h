@@ -140,17 +140,21 @@ int timespec_get(struct timespec *ts, int base);
 #define mtx_timed     1
 #define mtx_recursive 2
 
+#if !defined(_TTHREAD_MTX_T_SIZE_)
+  #if defined(_TTHREAD_WIN32_)
+    #if defined(_WIN64)
+      #define _TTHREAD_MTX_T_SIZE_ 6
+    #else
+      #define _TTHREAD_MTX_T_SIZE_ 7
+    #endif // defined(_WIN64)
+  #else
+    #define _TTHREAD_MTX_T_SIZE_ 5
+  #endif // defined(_TTHREAD_WIN32_)
+#endif // !defined(_TTHREAD_MTX_T_SIZE_)
+
 /* Opaque mutex */
 typedef struct {
-#if defined(_TTHREAD_WIN32_)
-#if defined(_WIN64)
-	size_t _opaque_data[6];
-#else
-	size_t _opaque_data[7];
-#endif
-#else
-	size_t _opaque_data[5];
-#endif
+	size_t _opaque_data[_TTHREAD_MTX_T_SIZE_];
 } mtx_t;
 
 /** Create a mutex object.
@@ -208,17 +212,21 @@ int mtx_trylock(mtx_t *mtx);
 */
 int mtx_unlock(mtx_t *mtx);
 
+#if !defined(_TTHREAD_CND_T_SIZE_)
+  #if defined(_TTHREAD_WIN32_)
+    #if defined(_WIN64)
+      #define _TTHREAD_CND_T_SIZE_ 8
+    #else
+      #define _TTHREAD_CND_T_SIZE_ 9
+    #endif // defined(_WIN64)
+  #else
+    #define _TTHREAD_CND_T_SIZE_ 6
+  #endif // defined(_TTHREAD_WIN32_)
+#endif // !defined(_TTHREAD_CND_T_SIZE_)
+
 /* Opaque condition variable */
 typedef struct {
-#if defined(_TTHREAD_WIN32_)
-#if defined(_WIN64)
-	size_t _opaque_data[8];
-#else
-	size_t _opaque_data[9];
-#endif
-#else
-	size_t _opaque_data[6];
-#endif
+	size_t _opaque_data[_TTHREAD_CND_T_SIZE_];
 } cnd_t;
 
 /** Create a condition variable object.
@@ -279,9 +287,13 @@ int cnd_wait(cnd_t *cond, mtx_t *mtx);
 */
 int cnd_timedwait(cnd_t *cond, mtx_t *mtx, const struct timespec *ts);
 
+#if !defined(_TTHREAD_THRD_T_SIZE_)
+  #define _TTHREAD_THRD_T_SIZE_ 1
+#endif
+
 /* Thread */
 typedef struct {
-	size_t _opaque_data[1];
+	size_t _opaque_data[_TTHREAD_THRD_T_SIZE_];
 } thrd_t;
 
 /** Thread start function.
