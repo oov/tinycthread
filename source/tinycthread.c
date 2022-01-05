@@ -326,7 +326,7 @@ int mtx_unlock(mtx_t *opaque_mtx)
   }
   return thrd_success;
 #else
-  return pthread_mutex_unlock(mtx) == 0 ? thrd_success : thrd_error;;
+  return pthread_mutex_unlock(mtx) == 0 ? thrd_success : thrd_error;
 #endif
 }
 
