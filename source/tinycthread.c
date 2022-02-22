@@ -714,7 +714,11 @@ int thrd_equal(thrd_t opaque_thr0, thrd_t opaque_thr1)
   system_thrd_t *thr0 = (system_thrd_t*)&opaque_thr0;
   system_thrd_t *thr1 = (system_thrd_t*)&opaque_thr1;
 #if defined(_TTHREAD_WIN32_)
+#if _WIN32_WINNT <= _WIN32_WINNT_WINXP
+  return *thr0 == *thr1;
+#else
   return GetThreadId(*thr0) == GetThreadId(*thr1);
+#endif
 #else
   return pthread_equal(*thr0, *thr1);
 #endif
