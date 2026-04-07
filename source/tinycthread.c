@@ -455,39 +455,37 @@ static int _cnd_timedwait_win32(cnd_t *opaque_cond, mtx_t *mtx, DWORD timeout)
   /* Wait for either event to become signaled due to cnd_signal() or
      cnd_broadcast() being called */
   result = WaitForMultipleObjects(2, cond->mEvents, false, timeout);
-  if (result == WAIT_TIMEOUT)
-  {
-    /* The mutex is locked again before the function returns, even if an error occurred */
-    mtx_lock(mtx);
-    return thrd_timedout;
-  }
-  else if (result == WAIT_FAILED)
-  {
-    /* The mutex is locked again before the function returns, even if an error occurred */
-    mtx_lock(mtx);
-    return thrd_error;
-  }
 
-  /* Check if we are the last waiter */
+  /* Re-acquire the mutex BEFORE decrementing the waiter count.
+     This closes the window where mWaitersCount drops to 0 while
+     the woken waiter has not yet re-checked its predicate, which
+     would cause cnd_signal to skip SetEvent and lose the signal. */
+  mtx_lock(mtx);
+
+  /* Decrement the waiter count now that we hold the mutex */
   EnterCriticalSection(&cond->mWaitersCountLock);
   -- cond->mWaitersCount;
   lastWaiter = (result == (WAIT_OBJECT_0 + _CONDITION_EVENT_ALL)) &&
                (cond->mWaitersCount == 0);
   LeaveCriticalSection(&cond->mWaitersCountLock);
 
+  if (result == WAIT_TIMEOUT)
+  {
+    return thrd_timedout;
+  }
+  else if (result == WAIT_FAILED)
+  {
+    return thrd_error;
+  }
+
   /* If we are the last waiter to be notified to stop waiting, reset the event */
   if (lastWaiter)
   {
     if (ResetEvent(cond->mEvents[_CONDITION_EVENT_ALL]) == 0)
     {
-      /* The mutex is locked again before the function returns, even if an error occurred */
-      mtx_lock(mtx);
       return thrd_error;
     }
   }
-
-  /* Re-acquire the mutex */
-  mtx_lock(mtx);
 
   return thrd_success;
 }
