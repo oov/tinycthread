@@ -64,6 +64,10 @@ extern "C" {
 /* Platform spacific underlying types, values */
 #if defined(_TTHREAD_WIN32_)
 
+#if defined(_WIN32_WINNT) && (_WIN32_WINNT >= 0x0600)
+#define _TTHREAD_WIN32_NATIVE_CONDVAR 1
+#endif
+
 typedef struct {
   union {
     CRITICAL_SECTION cs;      /* Critical section handle (used for non-timed mutexes) */
@@ -75,6 +79,9 @@ typedef struct {
 } system_mtx_t;
 
 typedef struct {
+#if defined(_TTHREAD_WIN32_NATIVE_CONDVAR)
+  CONDITION_VARIABLE mNativeCond; /* Native condition variable when available. */
+#endif
   struct _cnd_waiter_win32 *mWaiters; /* List of waiting threads. */
   CRITICAL_SECTION mWaitersLock;      /* Serialize access to mWaiters. */
 } system_cnd_t;
@@ -360,6 +367,9 @@ int cnd_init(cnd_t *opaque_cond)
   _Static_assert(sizeof(cnd_t) >= sizeof(system_cnd_t), "sizeof(cnd_t) must be greater than or equal to sizeof(system_cnd_t).");
   system_cnd_t *cond = (system_cnd_t*)opaque_cond;
 #if defined(_TTHREAD_WIN32_)
+#if defined(_TTHREAD_WIN32_NATIVE_CONDVAR)
+  InitializeConditionVariable(&cond->mNativeCond);
+#endif
   cond->mWaiters = NULL;
   InitializeCriticalSection(&cond->mWaitersLock);
   return thrd_success;
@@ -383,6 +393,7 @@ int cnd_signal(cnd_t *opaque_cond)
   system_cnd_t *cond = (system_cnd_t*)opaque_cond;
 #if defined(_TTHREAD_WIN32_)
   struct _cnd_waiter_win32 *waiter;
+  int signaled = false;
   int ret = thrd_success;
 
   EnterCriticalSection(&cond->mWaitersLock);
@@ -397,11 +408,20 @@ int cnd_signal(cnd_t *opaque_cond)
       else
       {
         waiter->mSignaled = true;
+        signaled = true;
       }
       break;
     }
   }
   LeaveCriticalSection(&cond->mWaitersLock);
+#if defined(_TTHREAD_WIN32_NATIVE_CONDVAR)
+  if (!signaled && ret == thrd_success)
+  {
+    WakeConditionVariable(&cond->mNativeCond);
+  }
+#else
+  (void)signaled;
+#endif
   return ret;
 #else
   return pthread_cond_signal(cond) == 0 ? thrd_success : thrd_error;
@@ -431,6 +451,9 @@ int cnd_broadcast(cnd_t *opaque_cond)
     }
   }
   LeaveCriticalSection(&cond->mWaitersLock);
+#if defined(_TTHREAD_WIN32_NATIVE_CONDVAR)
+  WakeAllConditionVariable(&cond->mNativeCond);
+#endif
   return ret;
 #else
   return pthread_cond_broadcast(cond) == 0 ? thrd_success : thrd_error;
@@ -438,7 +461,7 @@ int cnd_broadcast(cnd_t *opaque_cond)
 }
 
 #if defined(_TTHREAD_WIN32_)
-static int _cnd_timedwait_win32(cnd_t *opaque_cond, mtx_t *mtx, DWORD timeout)
+static int _cnd_timedwait_win32_fallback(cnd_t *opaque_cond, mtx_t *mtx, DWORD timeout)
 {
   system_cnd_t *cond = (system_cnd_t*)opaque_cond;
   struct _cnd_waiter_win32 waiter;
@@ -497,6 +520,47 @@ static int _cnd_timedwait_win32(cnd_t *opaque_cond, mtx_t *mtx, DWORD timeout)
   }
 
   return ret;
+}
+
+static int _cnd_timedwait_win32(cnd_t *opaque_cond, mtx_t *opaque_mtx, DWORD timeout)
+{
+  system_mtx_t *mtx = (system_mtx_t*)opaque_mtx;
+  system_cnd_t *cond = (system_cnd_t*)opaque_cond;
+  DWORD err;
+  BOOL result;
+
+#if defined(_TTHREAD_WIN32_NATIVE_CONDVAR)
+  if (mtx->mTimed)
+  {
+    return _cnd_timedwait_win32_fallback(opaque_cond, opaque_mtx, timeout);
+  }
+
+  if (!mtx->mRecursive)
+  {
+    mtx->mAlreadyLocked = false;
+  }
+  result = SleepConditionVariableCS(&cond->mNativeCond, &mtx->mHandle.cs, timeout);
+  if (!mtx->mRecursive)
+  {
+    mtx->mAlreadyLocked = true;
+  }
+  if (result)
+  {
+    return thrd_success;
+  }
+  err = GetLastError();
+  if (err == ERROR_TIMEOUT)
+  {
+    return thrd_timedout;
+  }
+  return thrd_error;
+#else
+  (void)mtx;
+  (void)cond;
+  (void)err;
+  (void)result;
+  return _cnd_timedwait_win32_fallback(opaque_cond, opaque_mtx, timeout);
+#endif
 }
 #endif
 
