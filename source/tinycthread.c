@@ -75,15 +75,40 @@ typedef struct {
 } system_mtx_t;
 
 typedef struct {
-  HANDLE mEvents[2];                  /* Signal and broadcast event HANDLEs. */
-  unsigned int mWaitersCount;         /* Count of the number of waiters. */
-  CRITICAL_SECTION mWaitersCountLock; /* Serialize access to mWaitersCount. */
+  struct _cnd_waiter_win32 *mWaiters; /* List of waiting threads. */
+  CRITICAL_SECTION mWaitersLock;      /* Serialize access to mWaiters. */
 } system_cnd_t;
+
+struct _cnd_waiter_win32 {
+  HANDLE mEvent;
+  int mSignaled;
+  struct _cnd_waiter_win32 *mNext;
+};
 
 typedef HANDLE system_thrd_t;
 typedef DWORD system_tss_t;
 
 #define TSS_DTOR_ITERATIONS (4)
+
+static _Thread_local HANDLE _tinycthread_cnd_event = NULL;
+
+static HANDLE _tinycthread_cnd_get_event(void)
+{
+  if (_tinycthread_cnd_event == NULL)
+  {
+    _tinycthread_cnd_event = CreateEvent(NULL, false, false, NULL);
+  }
+  return _tinycthread_cnd_event;
+}
+
+static void _tinycthread_cnd_cleanup(void)
+{
+  if (_tinycthread_cnd_event != NULL)
+  {
+    CloseHandle(_tinycthread_cnd_event);
+    _tinycthread_cnd_event = NULL;
+  }
+}
 
 #else
 
@@ -330,36 +355,13 @@ int mtx_unlock(mtx_t *opaque_mtx)
 #endif
 }
 
-#if defined(_TTHREAD_WIN32_)
-#define _CONDITION_EVENT_ONE 0
-#define _CONDITION_EVENT_ALL 1
-#endif
-
 int cnd_init(cnd_t *opaque_cond)
 {
   _Static_assert(sizeof(cnd_t) >= sizeof(system_cnd_t), "sizeof(cnd_t) must be greater than or equal to sizeof(system_cnd_t).");
   system_cnd_t *cond = (system_cnd_t*)opaque_cond;
 #if defined(_TTHREAD_WIN32_)
-  cond->mWaitersCount = 0;
-
-  /* Init critical section */
-  InitializeCriticalSection(&cond->mWaitersCountLock);
-
-  /* Init events */
-  cond->mEvents[_CONDITION_EVENT_ONE] = CreateEvent(NULL, false, false, NULL);
-  if (cond->mEvents[_CONDITION_EVENT_ONE] == NULL)
-  {
-    cond->mEvents[_CONDITION_EVENT_ALL] = NULL;
-    return thrd_error;
-  }
-  cond->mEvents[_CONDITION_EVENT_ALL] = CreateEvent(NULL, true, false, NULL);
-  if (cond->mEvents[_CONDITION_EVENT_ALL] == NULL)
-  {
-    CloseHandle(cond->mEvents[_CONDITION_EVENT_ONE]);
-    cond->mEvents[_CONDITION_EVENT_ONE] = NULL;
-    return thrd_error;
-  }
-
+  cond->mWaiters = NULL;
+  InitializeCriticalSection(&cond->mWaitersLock);
   return thrd_success;
 #else
   return pthread_cond_init(cond, NULL) == 0 ? thrd_success : thrd_error;
@@ -370,15 +372,7 @@ void cnd_destroy(cnd_t *opaque_cond)
 {
   system_cnd_t *cond = (system_cnd_t*)opaque_cond;
 #if defined(_TTHREAD_WIN32_)
-  if (cond->mEvents[_CONDITION_EVENT_ONE] != NULL)
-  {
-    CloseHandle(cond->mEvents[_CONDITION_EVENT_ONE]);
-  }
-  if (cond->mEvents[_CONDITION_EVENT_ALL] != NULL)
-  {
-    CloseHandle(cond->mEvents[_CONDITION_EVENT_ALL]);
-  }
-  DeleteCriticalSection(&cond->mWaitersCountLock);
+  DeleteCriticalSection(&cond->mWaitersLock);
 #else
   pthread_cond_destroy(cond);
 #endif
@@ -388,23 +382,27 @@ int cnd_signal(cnd_t *opaque_cond)
 {
   system_cnd_t *cond = (system_cnd_t*)opaque_cond;
 #if defined(_TTHREAD_WIN32_)
-  int haveWaiters;
+  struct _cnd_waiter_win32 *waiter;
+  int ret = thrd_success;
 
-  /* Are there any waiters? */
-  EnterCriticalSection(&cond->mWaitersCountLock);
-  haveWaiters = (cond->mWaitersCount > 0);
-  LeaveCriticalSection(&cond->mWaitersCountLock);
-
-  /* If we have any waiting threads, send them a signal */
-  if(haveWaiters)
+  EnterCriticalSection(&cond->mWaitersLock);
+  for (waiter = cond->mWaiters; waiter != NULL; waiter = waiter->mNext)
   {
-    if (SetEvent(cond->mEvents[_CONDITION_EVENT_ONE]) == 0)
+    if (!waiter->mSignaled)
     {
-      return thrd_error;
+      if (SetEvent(waiter->mEvent) == 0)
+      {
+        ret = thrd_error;
+      }
+      else
+      {
+        waiter->mSignaled = true;
+      }
+      break;
     }
   }
-
-  return thrd_success;
+  LeaveCriticalSection(&cond->mWaitersLock);
+  return ret;
 #else
   return pthread_cond_signal(cond) == 0 ? thrd_success : thrd_error;
 #endif
@@ -414,23 +412,26 @@ int cnd_broadcast(cnd_t *opaque_cond)
 {
   system_cnd_t *cond = (system_cnd_t*)opaque_cond;
 #if defined(_TTHREAD_WIN32_)
-  int haveWaiters;
+  struct _cnd_waiter_win32 *waiter;
+  int ret = thrd_success;
 
-  /* Are there any waiters? */
-  EnterCriticalSection(&cond->mWaitersCountLock);
-  haveWaiters = (cond->mWaitersCount > 0);
-  LeaveCriticalSection(&cond->mWaitersCountLock);
-
-  /* If we have any waiting threads, send them a signal */
-  if(haveWaiters)
+  EnterCriticalSection(&cond->mWaitersLock);
+  for (waiter = cond->mWaiters; waiter != NULL; waiter = waiter->mNext)
   {
-    if (SetEvent(cond->mEvents[_CONDITION_EVENT_ALL]) == 0)
+    if (!waiter->mSignaled)
     {
-      return thrd_error;
+      if (SetEvent(waiter->mEvent) == 0)
+      {
+        ret = thrd_error;
+      }
+      else
+      {
+        waiter->mSignaled = true;
+      }
     }
   }
-
-  return thrd_success;
+  LeaveCriticalSection(&cond->mWaitersLock);
+  return ret;
 #else
   return pthread_cond_broadcast(cond) == 0 ? thrd_success : thrd_error;
 #endif
@@ -440,54 +441,62 @@ int cnd_broadcast(cnd_t *opaque_cond)
 static int _cnd_timedwait_win32(cnd_t *opaque_cond, mtx_t *mtx, DWORD timeout)
 {
   system_cnd_t *cond = (system_cnd_t*)opaque_cond;
+  struct _cnd_waiter_win32 waiter;
+  struct _cnd_waiter_win32 **link;
   DWORD result;
-  int lastWaiter;
+  int signaled;
+  int ret = thrd_success;
 
-  /* Increment number of waiters */
-  EnterCriticalSection(&cond->mWaitersCountLock);
-  ++ cond->mWaitersCount;
-  LeaveCriticalSection(&cond->mWaitersCountLock);
+  waiter.mEvent = _tinycthread_cnd_get_event();
+  if (waiter.mEvent == NULL)
+  {
+    return thrd_error;
+  }
+  if (ResetEvent(waiter.mEvent) == 0)
+  {
+    return thrd_error;
+  }
+  waiter.mSignaled = false;
+
+  EnterCriticalSection(&cond->mWaitersLock);
+  waiter.mNext = cond->mWaiters;
+  cond->mWaiters = &waiter;
+  LeaveCriticalSection(&cond->mWaitersLock);
 
   /* Release the mutex while waiting for the condition (will decrease
      the number of waiters when done)... */
   mtx_unlock(mtx);
 
-  /* Wait for either event to become signaled due to cnd_signal() or
-     cnd_broadcast() being called */
-  result = WaitForMultipleObjects(2, cond->mEvents, false, timeout);
+  result = WaitForSingleObject(waiter.mEvent, timeout);
 
   /* Re-acquire the mutex BEFORE decrementing the waiter count.
-     This closes the window where mWaitersCount drops to 0 while
+     This closes the window where cnd_signal sees no waiter while
      the woken waiter has not yet re-checked its predicate, which
      would cause cnd_signal to skip SetEvent and lose the signal. */
   mtx_lock(mtx);
 
-  /* Decrement the waiter count now that we hold the mutex */
-  EnterCriticalSection(&cond->mWaitersCountLock);
-  -- cond->mWaitersCount;
-  lastWaiter = (result == (WAIT_OBJECT_0 + _CONDITION_EVENT_ALL)) &&
-               (cond->mWaitersCount == 0);
-  LeaveCriticalSection(&cond->mWaitersCountLock);
+  EnterCriticalSection(&cond->mWaitersLock);
+  signaled = waiter.mSignaled;
+  for (link = &cond->mWaiters; *link != NULL; link = &(*link)->mNext)
+  {
+    if (*link == &waiter)
+    {
+      *link = waiter.mNext;
+      break;
+    }
+  }
+  LeaveCriticalSection(&cond->mWaitersLock);
 
   if (result == WAIT_TIMEOUT)
   {
-    return thrd_timedout;
+    ret = signaled ? thrd_success : thrd_timedout;
   }
   else if (result == WAIT_FAILED)
   {
-    return thrd_error;
+    ret = thrd_error;
   }
 
-  /* If we are the last waiter to be notified to stop waiting, reset the event */
-  if (lastWaiter)
-  {
-    if (ResetEvent(cond->mEvents[_CONDITION_EVENT_ALL]) == 0)
-    {
-      return thrd_error;
-    }
-  }
-
-  return thrd_success;
+  return ret;
 }
 #endif
 
@@ -584,6 +593,11 @@ static void NTAPI _tinycthread_tss_callback(PVOID h, DWORD dwReason, PVOID pv)
   (void)h;
   (void)pv;
 
+  if (dwReason == DLL_THREAD_DETACH || dwReason == DLL_PROCESS_DETACH)
+  {
+    _tinycthread_cnd_cleanup();
+  }
+
   if (_tinycthread_tss_head != NULL && (dwReason == DLL_THREAD_DETACH || dwReason == DLL_PROCESS_DETACH))
   {
     _tinycthread_tss_cleanup();
@@ -639,6 +653,7 @@ static void * _thrd_wrapper_function(void * aArg)
   res = fun(arg);
 
 #if defined(_TTHREAD_WIN32_)
+  _tinycthread_cnd_cleanup();
 #if !defined(DISABLE_TLS)
   if (_tinycthread_tss_head != NULL)
   {
@@ -725,6 +740,7 @@ int thrd_equal(thrd_t opaque_thr0, thrd_t opaque_thr1)
 void thrd_exit(int res)
 {
 #if defined(_TTHREAD_WIN32_)
+  _tinycthread_cnd_cleanup();
 #if !defined(DISABLE_TLS)
   if (_tinycthread_tss_head != NULL)
   {
